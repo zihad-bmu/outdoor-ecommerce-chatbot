@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>North Star Support Bot</title>
+
+<style>
+:root {
+  --primary: #1f3d36;
+  --accent: #3a7d6b;
+  --earth: #8c6a43;
+  --bot: #e4f1ed;
+  --user: #2f5d50;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  background: linear-gradient(135deg, #dde7e1, #f6f8f7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.chat-container {
+  width: 100%;
+  max-width: 440px;
+  height: 95vh;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-header {
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  color: #fff;
+  padding: 18px;
+  text-align: center;
+}
+
+.chat-header h1 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.chat-header span {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.chat-box {
+  flex: 1;
+  padding: 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.message {
+  padding: 12px 16px;
+  border-radius: 16px;
+  max-width: 80%;
+  font-size: 14px;
+  line-height: 1.4;
+  animation: fadeIn 0.2s ease-in;
+}
+
+.bot { background: var(--bot); }
+.user {
+  background: var(--user);
+  color: #fff;
+  align-self: flex-end;
+}
+
+.input-area {
+  display: flex;
+  padding: 12px;
+  border-top: 1px solid #eee;
+}
+
+input {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #ccc;
+  outline: none;
+}
+
+.send-btn {
+  margin-left: 8px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 12px;
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+}
+
+.quick-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.quick-btn {
+  background: var(--earth);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.quick-btn:hover {
+  opacity: 0.9;
+}
+
+/* Added to disable old quick replies */
+.quick-replies.disabled .quick-btn {
+  pointer-events: none;
+  opacity: 0.5;
+  background: #ccc;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media(max-width:500px) {
+  .chat-container { height: 100vh; border-radius: 0; }
+}
+</style>
+</head>
+<body>
+
+<div class="chat-container">
+  <div class="chat-header">
+    <h1>🧭 North Star Support Bot</h1>
+    <span>Outdoor Gear Customer Support</span>
+  </div>
+
+  <div class="chat-box" id="chatBox"></div>
+
+  <div class="input-area">
+    <input type="text" id="userInput" placeholder="Ask about orders, returns, or gear..." />
+    <button class="send-btn" onclick="handleInput()">Send</button>
+  </div>
+</div>
+
+<script>
+const chatBox = document.getElementById("chatBox");
+let state = "main";
+let fallbackCount = 0;
+let recommendationData = {};
+
+/* UI FUNCTIONS */
+
+function bot(msg) {
+  const div = document.createElement("div");
+  div.className = "message bot";
+  div.innerHTML = msg;
+  chatBox.appendChild(div);
+  scrollToBottom();
+}
+
+function user(msg) {
+  const div = document.createElement("div");
+  div.className = "message user";
+  div.innerHTML = msg;
+  chatBox.appendChild(div);
+  scrollToBottom();
+}
+
+function quick(options) {
+  disableOldQuickReplies(); // Ensure old buttons can't be clicked
+  const wrap = document.createElement("div");
+  wrap.className = "quick-replies";
+  
+  options.forEach(opt => {
+    const btn = document.createElement("div");
+    btn.className = "quick-btn";
+    btn.innerText = opt;
+    btn.onclick = () => {
+      user(opt);
+      routeInput(opt.toLowerCase());
+    };
+    wrap.appendChild(btn);
+  });
+  
+  chatBox.appendChild(wrap);
+  scrollToBottom();
+}
+
+function disableOldQuickReplies() {
+  const activeReplies = document.querySelectorAll(".quick-replies:not(.disabled)");
+  activeReplies.forEach(el => el.classList.add("disabled"));
+}
+
+function scrollToBottom() {
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+/* MAIN MENU */
+
+function showMainMenu() {
+  state = "main";
+  fallbackCount = 0;
+  recommendationData = {};
+  bot("Hi there! How can I help you today?");
+  quick([
+    "Track My Order",
+    "Returns & Exchanges",
+    "Product Recommendations",
+    "Shipping Information",
+    "Talk to a Human"
+  ]);
+}
+
+function handleInput() {
+  const input = document.getElementById("userInput");
+  const text = input.value.trim();
+  if (!text) return;
+  
+  disableOldQuickReplies(); // Prevent clicking old buttons when typing
+  user(text);
+  routeInput(text.toLowerCase());
+  input.value = "";
+}
+
+/* ROUTER */
+
+function routeInput(input) {
+
+  /* GLOBAL EXIT */
+  if (input === "menu" || input.includes("back to main menu")) {
+    showMainMenu();
+    return;
+  }
+
+  /* INTENT DETECTION */
+  const isOrderIntent = /track|order status|where.*order|track my package|track my order/i.test(input);
+  const isReturnIntent = /return|exchange|refund/i.test(input);
+  const isRecommendIntent = /recommend|help me pick|what should i buy|gear/i.test(input);
+  const isShippingIntent = /shipping|delivery/i.test(input);
+  const isHumanIntent = /human|agent|real person|support|representative/i.test(input);
+
+  /* HUMAN REQUEST */
+  if (isHumanIntent && state !== "live_agent") {
+    state = "live_agent";
+    bot("Connecting you to a Live Agent... 🧑‍💻<br><br><i>[Simulated] An agent has joined the chat.</i>");
+    quick(["Back to Main Menu"]);
+    return;
+  }
+
+  /* LIVE AGENT MODE */
+  if (state === "live_agent") {
+    bot("<i>[Agent]: I'm looking into that for you. (Type 'menu' to exit chat)</i>");
+    return; // Kicks out of routing so bot doesn't interfere with agent
+  }
+
+  /* RESET FALLBACK ON NEW INPUT */
+  fallbackCount = 0;
+
+  switch(state) {
+
+    case "main":
+      if (isOrderIntent) {
+        state = "order";
+        bot("Please enter your 3-digit order number (e.g., 111, 222, 333).");
+        return;
+      }
+
+      if (isReturnIntent) {
+        bot("<b>Return Policy:</b><br>• 30-day returns<br>• Items must be unused<br>• Original packaging required<br><br>Start your return here: <a href='#'>www.northstar.com/returns</a>");
+        quick(["Back to Main Menu"]);
+        return;
+      }
+
+      if (isRecommendIntent) {
+        state = "recommend_activity";
+        bot("What activity is this for — hiking, camping, or backpacking?");
+        quick(["Hiking", "Camping", "Backpacking"]);
+        return;
+      }
+
+      if (isShippingIntent) {
+        bot("<b>Shipping Information:</b><br>• Standard shipping: 3-5 business days<br>• Expedited shipping: 1-2 business days");
+        quick(["Back to Main Menu"]);
+        return;
+      }
+
+      fallback();
+      break;
+
+    case "order":
+      if (input.includes("111")) {
+        bot("📦 Your order #111 has shipped and is arriving tomorrow.");
+      } else if (input.includes("222")) {
+        bot("⚙️ Your order #222 is processing and ships in 24 hours.");
+      } else if (input.includes("333")) {
+        bot("✅ Your order #333 was delivered.");
+        bot("Need help with a return or exchange?");
+      } else {
+        bot("I couldn't find an order with that number. Please try again or return to the menu.");
+        quick(["Back to Main Menu"]);
+        return; // keeps them in order state so they can try again
+      }
+      quick(["Back to Main Menu"]);
+      state = "main";
+      break;
+
+    case "recommend_activity":
+      if (/hiking|camping|backpacking/i.test(input)) {
+        recommendationData.activity = input;
+        state = "recommend_budget";
+        bot("Great! What is your budget range — budget, mid-range, or premium?");
+        quick(["Budget", "Mid-range", "Premium"]);
+      } else {
+        bot("I didn't catch that. Is it for hiking, camping, or backpacking?");
+        quick(["Hiking", "Camping", "Backpacking"]);
+      }
+      break;
+
+    case "recommend_budget":
+      let suggestion = "outdoor gear";
+      if (recommendationData.activity.includes("hiking")) {
+        suggestion = "hiking boots";
+      } else if (recommendationData.activity.includes("camping")) {
+        suggestion = "tents";
+      } else if (recommendationData.activity.includes("backpacking")) {
+        suggestion = "lightweight backpacks";
+      }
+
+      bot(`Based on your ${input} budget for ${recommendationData.activity}, I recommend checking out our top-rated <b>${suggestion}</b>!`);
+      quick(["Back to Main Menu"]);
+      state = "main";
+      break;
+  }
+}
+
+function fallback() {
+  fallbackCount++;
+  bot("I didn’t quite understand that.");
+  
+  if (fallbackCount >= 2) {
+    state = "live_agent";
+    bot("It seems I'm having trouble. Connecting you to a Live Agent... 🧑‍💻");
+    quick(["Back to Main Menu"]);
+  } else {
+    quick([
+      "Track My Order",
+      "Returns & Exchanges",
+      "Product Recommendations",
+      "Shipping Information",
+      "Talk to a Human"
+    ]);
+  }
+}
+
+document.getElementById("userInput")
+  .addEventListener("keypress", e => {
+    if (e.key === "Enter") handleInput();
+  });
+
+showMainMenu();
+</script>
+
+</body>
+</html>
